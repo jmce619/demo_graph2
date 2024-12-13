@@ -1,186 +1,165 @@
 import streamlit as st
-import pandas as pd
 import geopandas as gpd
-import folium
-import base64
-import numpy as np
-import matplotlib.pyplot as plt
-from io import BytesIO
-from streamlit_folium import folium_static
+import pandas as pd
+import altair as alt
+import json
 
-def set_custom_style():
-    st.markdown(
-        """
-        <style>
-        .stApp {
-            background-color: #FFFFFF;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+st.set_page_config(layout="wide")
 
 @st.cache_data
-def load_data(file_path='merged_gdf_raw.gpkg'):
-    # Load the geopackage with raw numeric data only
-    try:
-        gdf = gpd.read_file(file_path)
-    except FileNotFoundError:
-        st.error(f"Data file not found at path: {file_path}")
-        st.stop()
-    except Exception as e:
-        st.error(f"Failed to load data: {e}")
-        st.stop()
+def load_data():
+    # Load raw gdf (ensure it has 'GEOID', 'NAME', and the needed variables)
+    gdf = gpd.read_file('merged_gdf_raw.gpkg')
+    gdf = gdf.to_crs(epsg=4326)
     return gdf
 
-# Define your variable sets and label dictionaries (customize as needed)
-female_vars = ["P12_027N","P12_028N","P12_029N","P12_030N","P12_031N","P12_032N","P12_033N","P12_034N","P12_035N","P12_036N","P12_037N","P12_038N","P12_039N","P12_040N","P12_041N","P12_042N","P12_043N","P12_044N","P12_045N","P12_046N","P12_047N","P12_048N","P12_049N"]
-male_vars = ["P12_003N","P12_004N","P12_005N","P12_006N","P12_007N","P12_008N","P12_009N","P12_010N","P12_011N","P12_012N","P12_013N","P12_014N","P12_015N","P12_016N","P12_017N","P12_018N","P12_019N","P12_020N","P12_021N","P12_022N","P12_023N","P12_024N","P12_025N"]
-third_vars = ["P10_003N","P10_004N","P10_005N","P10_006N","P10_007N","P10_008N","P10_009N","P10_010N","P10_011N","P10_012N","P10_013N","P10_014N","P10_015N","P10_016N","P10_017N","P10_018N","P10_019N","P10_020N","P10_021N","P10_022N","P10_023N","P10_024N","P10_025N"]
+gdf = load_data()
 
-variable_labels = {
-    # Provide human-readable labels for your variable codes
-    # Example: "P12_027N": "Female Age 0-4", etc.
-    # Fill in the actual labels as appropriate
-}
+# Define variable sets
+variables_set_female_age = [
+   'Female Under 5 years',
+   'Female 5 to 9 years',
+   'Female 10 to 14 years',
+   'Female 15 to 17 years',
+   'Female 18 and 19 years',
+   'Female 20 years',
+   'Female 21 years',
+   'Female 22 to 24 years',
+   'Female 25 to 29 years',
+   'Female 30 to 34 years',
+   'Female 35 to 39 years',
+   'Female 40 to 44 years',
+   'Female 45 to 49 years',
+   'Female 50 to 54 years',
+   'Female 55 to 59 years',
+   'Female 60 and 61 years',
+   'Female 62 to 64 years',
+   'Female 65 and 66 years',
+   'Female 67 to 69 years',
+   'Female 70 to 74 years',
+   'Female 75 to 79 years',
+   'Female 80 to 84 years',
+   'Female 85 years and over'
+]
+variables_set_male_age = [
+   'Male Under 5 years',
+   'Male 5 to 9 years',
+   'Male 10 to 14 years',
+   'Male 15 to 17 years',
+   'Male 18 and 19 years',
+   'Male 20 years',
+   'Male 21 years',
+   'Male 22 to 24 years',
+   'Male 25 to 29 years',
+   'Male 30 to 34 years',
+   'Male 35 to 39 years',
+   'Male 40 to 44 years',
+   'Male 45 to 49 years',
+   'Male 50 to 54 years',
+   'Male 55 to 59 years',
+   'Male 60 and 61 years',
+   'Male 62 to 64 years',
+   'Male 65 and 66 years',
+   'Male 67 to 69 years',
+   'Male 70 to 74 years',
+   'Male 75 to 79 years',
+   'Male 80 to 84 years',
+   'Male 85 years and over'
+]
+variables_set_third = [
+ 
+   'Black or African American alone',
+   'American Indian and Alaska Native alone',
+   'Asian alone',
+   'Native Hawaiian and Other Pacific Islander alone',
+   'Some Other Race alone',
+   'Population of two or more races:',
+   'Population of two races:',
+   'White; Black or African American',
+   'White; American Indian and Alaska Native',
+   'White; Asian',
+   'White; Native Hawaiian and Other Pacific Islander',
+   'White; Some Other Race',
+   'Black or African American; American Indian and Alaska Native',
+   'Black or African American; Asian',
+   'Black or African American; Native Hawaiian and Other Pacific Islander',
+   'Black or African American; Some Other Race',
+   'American Indian and Alaska Native; Asian',
+   'American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander',
+   'American Indian and Alaska Native; Some Other Race',
+   'Asian; Native Hawaiian and Other Pacific Islander',
+   'Asian; Some Other Race',
+   'Native Hawaiian and Other Pacific Islander; Some Other Race',
+]
 
-def generate_population_pyramid_chart(row, female_vars, male_vars, labels_dict):
-    """
-    Create a population pyramid: male on left (negative x) and female on right (positive x).
-    """
-    female_values = [row[v] for v in female_vars if v in row and pd.notna(row[v])]
-    male_values = [row[v] for v in male_vars if v in row and pd.notna(row[v])]
+bar_vars = variables_set_female_age + variables_set_male_age + variables_set_third
 
-    if len(female_values) == 0 and len(male_values) == 0:
-        return None
+if not all(var in gdf.columns for var in bar_vars):
+    st.write("Columns in the GeoDataFrame:", gdf.columns)
+    st.stop()
 
-    length = min(len(female_values), len(male_values))
-    female_values = female_values[:length]
-    male_values = male_values[:length]
+# Convert GeoDataFrame to a GeoJSON-like dict
+geojson = json.loads(gdf.to_json())
+geo_data = alt.Data(values=geojson['features'])
 
-    female_values = np.array(female_values)
-    male_values = np.array(male_values)
-    female_labels = [labels_dict.get(v, v) for v in female_vars][:length]
+# Melt the variables into a tidy DataFrame for the bar chart
+bar_data = gdf[["GEOID"] + bar_vars].copy()
+bar_data = bar_data.melt(id_vars='GEOID', var_name='variable', value_name='value')
 
-    plt.figure(figsize=(6, 8))
-    y_positions = np.arange(length)
+# Important: The map selection will reference 'properties.GEOID'.
+# We need to have the same field name in bar_data to allow filtering.
+bar_data['properties.GEOID'] = bar_data['GEOID']
 
-    # Male: negative side, Female: positive side
-    plt.barh(y_positions, -male_values, color='skyblue', label='Male')
-    plt.barh(y_positions, female_values, color='pink', label='Female')
+# Create a new column that classifies variables as Male, Female, or Other
+def classify_gender(var):
+    if var.startswith('Male'):
+        return 'Male'
+    elif var.startswith('Female'):
+        return 'Female'
+    else:
+        return 'Other'
 
-    plt.yticks(y_positions, female_labels)
-    plt.xlabel('Population Count')
-    district_name = row.get('NAME', 'Unknown District')
-    plt.title(district_name)
+bar_data['gender'] = bar_data['variable'].apply(classify_gender)
 
-    plt.axvline(0, color='black')
+# Create a single selection that uses 'properties.GEOID' as the key
+selection = alt.selection_single(
+    fields=['properties.GEOID'],
+    on='click',
+    empty='none'
+)
 
-    max_val = max(male_values.max() if len(male_values) > 0 else 0,
-                  female_values.max() if len(female_values) > 0 else 0)
-    plt.xlim(-max_val, max_val)
+# Create the polygon map chart
+map_chart = (
+    alt.Chart(geo_data)
+    .mark_geoshape(stroke='black', strokeWidth=0.5)
+    .encode(
+        color=alt.condition(selection, alt.value('steelblue'), alt.value('lightgray')),
+        tooltip=['properties.NAME:N', 'properties.GEOID:N']  # tooltips on hover
+    )
+    .add_selection(selection)
+    .project(type='albersUsa')
+    .properties(width=600, height=400)
+)
 
-    plt.legend()
-    plt.tight_layout()
+# Create the bar chart linked to the selection
+bars = (
+    alt.Chart(bar_data)
+    .mark_bar()
+    .encode(
+        x=alt.X('variable:N', title='Variable'),
+        y=alt.Y('value:Q', title='Value'),
+        tooltip=['variable:N', 'value:Q'],
+        # Set color based on gender classification
+        color=alt.Color('gender:N', 
+                        scale=alt.Scale(
+                            domain=['Male', 'Female', 'Other'],
+                            range=['blue', 'pink', 'gray']  # 'Other' gets gray as a fallback
+                        ))
+    )
+    .transform_filter(selection)  # Only show data for the selected district
+    .properties(width=600, height=200)
+)
 
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=100)
-    plt.close()
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode('utf-8')
 
-def generate_third_chart(row, third_vars, labels_dict):
-    """
-    Simple vertical bar chart for the third data set.
-    """
-    values = [row[v] for v in third_vars if v in row and pd.notna(row[v])]
-    if not values:
-        return None
-
-    labels = [labels_dict.get(var, var) for var in third_vars]
-
-    plt.figure(figsize=(14, 12))
-    plt.bar(labels, values, color='teal')
-    plt.xticks(rotation=45, ha='right', fontsize=10)
-    plt.ylabel('Count', fontsize=14)
-    plt.title('Ethnic Breakdown', fontsize=14)
-    plt.tight_layout()
-
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=100)
-    plt.close()
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode('utf-8')
-
-def generate_map(gdf):
-    m = folium.Map(location=[37.8, -96], zoom_start=4)
-
-    def create_html_content(row):
-        # Generate charts on-the-fly
-        pyramid_img = generate_population_pyramid_chart(row, female_vars, male_vars, variable_labels)
-        third_img = generate_third_chart(row, third_vars, variable_labels)
-
-        district_name = row.get('NAME', 'Unknown District')
-
-        # Embed the images if they exist
-        pyramid_section = f"<img src='data:image/png;base64,{pyramid_img}' style='width:280px;height:400px;'>" if pyramid_img else "<p>No population pyramid data</p>"
-        third_section = f"<img src='data:image/png;base64,{third_img}' style='width:280px;height:150px;'>" if third_img else "<p>No third data</p>"
-
-        html = f"""
-        <div style="width:300px;">
-            <h4>{district_name}</h4>
-            {pyramid_section}
-            <h5>Additional Data Set</h5>{third_section}
-        </div>
-        """
-        return html
-
-    def style_function(feature):
-        return {
-            'fillColor': '#3186cc',
-            'color': 'black',
-            'weight': 0.5,
-            'fillOpacity': 0.7,
-        }
-
-    for idx, row in gdf.iterrows():
-        if row['geometry'] is None:
-            continue
-
-        html_content = create_html_content(row)
-        iframe = folium.IFrame(html=html_content, width=320, height=600)
-        popup = folium.Popup(iframe, max_width=320)
-
-        properties = row.drop('geometry', errors='ignore').to_dict()
-        feature = {
-            'type': 'Feature',
-            'properties': properties,
-            'geometry': row['geometry'].__geo_interface__
-        }
-
-        folium.GeoJson(
-            feature,
-            style_function=style_function,
-            highlight_function=lambda x: {'weight':3, 'color':'blue'},
-            tooltip=folium.Tooltip(row.get('NAME', 'Unknown District')),
-            popup=popup
-        ).add_to(m)
-
-    folium.LayerControl().add_to(m)
-    return m
-
-def main():
-    set_custom_style()
-    gdf = load_data()
-
-    # Now gdf no longer has 'Population_Pyramid' or 'Third_BarChart' columns
-    # They are generated dynamically.
-
-    folium_map = generate_map(gdf)
-    folium_static(folium_map, width=1200, height=800)
-
-    st.markdown("---")
-    st.markdown("**Data Source:** 2020 Census API | **App Developed by:** Your Name")
-
-if __name__ == "__main__":
-    main()
+# Display the charts in Streamlit.
+st.altair_chart(map_chart & bars, use_container_width=True)
