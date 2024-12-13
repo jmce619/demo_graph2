@@ -128,7 +128,7 @@ st.set_page_config(page_title="Demographic Maps with Bar Charts", layout="wide")
 
 @st.cache_data
 def load_data():
-    gdf = gpd.read_file('merged_gdf_specific.gpkg', layer='my_layer')
+    gdf = gpd.read_file('final_.shp')
 
     # Load embeddings from parquet
     embeddings_df = pd.read_parquet('my_embeddings.parquet')
@@ -243,8 +243,8 @@ def generate_map(gdf, variable, variable_labels):
             continue
 
         html_content = create_html_content(row)
-        iframe = folium.IFrame(html=html_content, width=320, height=600)
-        popup = folium.Popup(iframe, max_width=320)
+        iframe = folium.IFrame(html=html_content, width=240, height=400)
+        popup = folium.Popup(iframe, max_width=240)
 
         def style_function(feature):
             val = feature['properties'].get(variable, None)
