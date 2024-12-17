@@ -151,7 +151,7 @@ pyramid_chart = (
     )
     .transform_filter(selection)
     .transform_filter(alt.datum.gender != 'Other')
-    .properties(width=300, height=250)
+    .properties(width=300, height=200)
 )
 
 
@@ -167,7 +167,7 @@ bars_third_chart = (
         x=alt.X('variable:N', title='Race/Ethnicity'),
         y=alt.Y('value:Q',title=None),
         # Color each bar by its variable name for distinct colors
-        color=alt.Color('variable:N', title='Race', scale=alt.Scale(scheme='category20')),
+        color=alt.Color('variable:N', title='Race', scale=alt.Scale(scheme='category20'), legend=None),
         tooltip=['variable:N', 'value:Q']
     )
     .transform_filter(selection)
