@@ -129,7 +129,7 @@ map_chart = (
     )
     .add_selection(selection)
     .project(type='albersUsa')
-    .properties(width=400, height=300, title="Map")
+    .properties(width=400, height=300)
 )
 
 # For the pyramid chart, find the max population among Male and Female to set fixed x domain
@@ -151,7 +151,7 @@ pyramid_chart = (
     )
     .transform_filter(selection)
     .transform_filter(alt.datum.gender != 'Other')
-    .properties(width=400, height=300, title="Population Pyramid by Selected Area")
+    .properties(width=300, height=250)
 )
 
 
@@ -164,15 +164,15 @@ bars_third_chart = (
     alt.Chart(bar_data)
     .mark_bar()
     .encode(
-        x=alt.X('variable:N', title='Variable'),
-        y=alt.Y('value:Q', title='Value'),
+        x=alt.X('variable:N', title='Race/Ethnicity'),
+        y=alt.Y('value:Q', title='Population'),
         # Color each bar by its variable name for distinct colors
-        color=alt.Color('variable:N', title='Variable', scale=alt.Scale(scheme='category20')),
+        color=alt.Color('variable:N', title='Race', scale=alt.Scale(scheme='category20')),
         tooltip=['variable:N', 'value:Q']
     )
     .transform_filter(selection)
     .transform_filter(alt.datum.gender == 'Other')
-    .properties(width=240, height=120, title="Other Variables Only")
+    .properties(width=240, height=120)
 )
 
 final_chart = alt.vconcat(
