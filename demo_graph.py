@@ -8,14 +8,12 @@ st.set_page_config(layout="wide")
 
 @st.cache_data
 def load_data():
-    # Load raw gdf (ensure it has 'GEOID', 'NAME', and the needed variables)
     gdf = gpd.read_file('merged_gdf_raw.gpkg')
     gdf = gdf.to_crs(epsg=4326)
     return gdf
 
 gdf = load_data()
 
-# Define variable sets
 variables_set_female_age = [
    'Female Under 5 years',
    'Female 5 to 9 years',
@@ -41,6 +39,7 @@ variables_set_female_age = [
    'Female 80 to 84 years',
    'Female 85 years and over'
 ]
+
 variables_set_male_age = [
    'Male Under 5 years',
    'Male 5 to 9 years',
@@ -66,8 +65,8 @@ variables_set_male_age = [
    'Male 80 to 84 years',
    'Male 85 years and over'
 ]
+
 variables_set_third = [
- 
    'Black or African American alone',
    'American Indian and Alaska Native alone',
    'Asian alone',
@@ -98,19 +97,13 @@ if not all(var in gdf.columns for var in bar_vars):
     st.write("Columns in the GeoDataFrame:", gdf.columns)
     st.stop()
 
-# Convert GeoDataFrame to a GeoJSON-like dict
 geojson = json.loads(gdf.to_json())
 geo_data = alt.Data(values=geojson['features'])
 
-# Melt the variables into a tidy DataFrame for the bar chart
 bar_data = gdf[["GEOID"] + bar_vars].copy()
 bar_data = bar_data.melt(id_vars='GEOID', var_name='variable', value_name='value')
-
-# Important: The map selection will reference 'properties.GEOID'.
-# We need to have the same field name in bar_data to allow filtering.
 bar_data['properties.GEOID'] = bar_data['GEOID']
 
-# Create a new column that classifies variables as Male, Female, or Other
 def classify_gender(var):
     if var.startswith('Male'):
         return 'Male'
@@ -121,45 +114,70 @@ def classify_gender(var):
 
 bar_data['gender'] = bar_data['variable'].apply(classify_gender)
 
-# Create a single selection that uses 'properties.GEOID' as the key
-selection = alt.selection_single(
-    fields=['properties.GEOID'],
-    on='click',
-    empty='none'
-)
+# Remove "Male " and "Female " prefixes from age variables
+bar_data['age_group'] = bar_data['variable'].str.replace('Male ', '', regex=False).str.replace('Female ', '', regex=False)
 
-# Create the polygon map chart
+# Create a selection for the map
+selection = alt.selection_single(fields=['properties.GEOID'], empty='none')
+
 map_chart = (
     alt.Chart(geo_data)
     .mark_geoshape(stroke='black', strokeWidth=0.5)
     .encode(
         color=alt.condition(selection, alt.value('steelblue'), alt.value('lightgray')),
-        tooltip=['properties.NAME:N', 'properties.GEOID:N']  # tooltips on hover
+        tooltip=['properties.NAME:N', 'properties.GEOID:N']
     )
     .add_selection(selection)
     .project(type='albersUsa')
-    .properties(width=600, height=400)
+    .properties(width=700, height=500, title="Map")
 )
 
-# Create the bar chart linked to the selection
-bars = (
+# For the pyramid chart, find the max population among Male and Female to set fixed x domain
+max_val = bar_data.loc[bar_data['gender'].isin(['Male','Female']), 'value'].max()
+# Make male values negative
+bar_data['adj_value'] = bar_data.apply(lambda row: (-1)*row['value'] if row['gender']=='Male' else row['value'], axis=1)
+
+# Sort age groups (use the female_age list as a reference for sorting)
+age_order = [age.replace('Female ', '') for age in variables_set_female_age]
+
+pyramid_chart = (
+    alt.Chart(bar_data)
+    .mark_bar()
+    .encode(
+        y=alt.Y('age_group:N', sort=age_order, title='Age Group', axis=alt.Axis(orient='right')),
+        x=alt.X('adj_value:Q', title='Population', scale=alt.Scale(domain=[-max_val, max_val])),
+        color=alt.Color('gender:N', scale=alt.Scale(domain=['Male', 'Female'], range=['blue', 'pink'])),
+        tooltip=['age_group:N', 'value:Q', 'gender:N']
+    )
+    .transform_filter(selection)
+    .transform_filter(alt.datum.gender != 'Other')
+    .properties(width=700, height=500, title="Population Pyramid by Selected Area")
+)
+
+
+# Add a vertical rule at x=0
+rule = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(color='black').encode(x='x:Q')
+pyramid_combined = alt.layer(pyramid_chart, rule).resolve_scale(x='shared', y='shared')
+
+# The third bar chart with each bar a different color
+bars_third_chart = (
     alt.Chart(bar_data)
     .mark_bar()
     .encode(
         x=alt.X('variable:N', title='Variable'),
         y=alt.Y('value:Q', title='Value'),
-        tooltip=['variable:N', 'value:Q'],
-        # Set color based on gender classification
-        color=alt.Color('gender:N', 
-                        scale=alt.Scale(
-                            domain=['Male', 'Female', 'Other'],
-                            range=['blue', 'pink', 'gray']  # 'Other' gets gray as a fallback
-                        ))
+        # Color each bar by its variable name for distinct colors
+        color=alt.Color('variable:N', title='Variable', scale=alt.Scale(scheme='category20')),
+        tooltip=['variable:N', 'value:Q']
     )
-    .transform_filter(selection)  # Only show data for the selected district
-    .properties(width=600, height=200)
+    .transform_filter(selection)
+    .transform_filter(alt.datum.gender == 'Other')
+    .properties(width=400, height=300, title="Other Variables Only")
 )
 
+final_chart = alt.vconcat(
+    map_chart | bars_third_chart,
+    pyramid_combined
+).resolve_scale(color='independent')
 
-# Display the charts in Streamlit.
-st.altair_chart(map_chart & bars, use_container_width=True)
+st.altair_chart(final_chart)
