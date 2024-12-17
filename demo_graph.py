@@ -165,19 +165,20 @@ bars_third_chart = (
     .mark_bar()
     .encode(
         x=alt.X('variable:N', title='Race/Ethnicity'),
-        y=alt.Y('value:Q', title='Population'),
+        y=alt.Y('value:Q',title=None),
         # Color each bar by its variable name for distinct colors
         color=alt.Color('variable:N', title='Race', scale=alt.Scale(scheme='category20')),
         tooltip=['variable:N', 'value:Q']
     )
     .transform_filter(selection)
     .transform_filter(alt.datum.gender == 'Other')
-    .properties(width=240, height=120)
+    .properties(width=180, height=180)
 )
 
 final_chart = alt.vconcat(
-    map_chart | bars_third_chart,
+    alt.hconcat(map_chart, bars_third_chart),
     pyramid_combined
-).resolve_scale(color='independent')
+).configure_concat(spacing=5).resolve_scale(color='independent')
+
 
 st.altair_chart(final_chart)
